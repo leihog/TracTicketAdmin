@@ -1,0 +1,94 @@
+#!/usr/bin/env python
+
+import re
+import os
+import sys
+import shlex
+from subprocess import Popen, PIPE, call
+
+GIT_PATH = '/usr/bin/git'
+TRAC_ADMIN = '/usr/local/bin/trac-admin'
+BRANCHES = ['master']
+TRAC_ENV = '/media/sf_projects/trac/leif'
+REPO_NAME = '(default)'
+COMMANDS = {'fixes':    'fixed',
+            'fixed':    'fixed',
+            'fix':      'fixed',
+            'close':    'fixed',
+            'closed':   'fixed',
+            'closes':   'fixed'}
+
+ticket_prefix = '(?:#|(?:ticket|issue|bug)[: ]?)'
+ticket_reference = ticket_prefix + '[0-9]+'
+ticket_command =  (r'(?P<action>[A-Za-z]*).?'
+                    '(?P<ticket>%s(?:(?:[, &]*|[ ]?and[ ]?)%s)*)' %
+                    (ticket_reference, ticket_reference))
+command_re = re.compile(ticket_command)
+ticket_re = re.compile(ticket_prefix + '([0-9]+)')
+
+
+def call_git(command, args, input=None):
+    return Popen([GIT_PATH, command] + args, stdin=PIPE, stdout=PIPE).communicate(input)[0]
+
+
+def resolve_ticket(ticket_id, usr, comment):
+    foo = '%s %s ticket_resolve %s fixed %s "%s"' % (TRAC_ADMIN, TRAC_ENV, ticket_id, usr, comment.encode('string-escape') )
+    foo = shlex.split(foo)
+    return Popen( shlex.split(foo), stdout=PIPE ).communicate()[0]
+
+
+def get_new_commits(ref_updates):
+    """ Gets a list uf updates from git running post-receive,
+    we want the list of new commits to the repo, that are part
+    of the push. Even if the are in more then one ref in the push.
+
+    Basically, we are running:
+    git rev-list new1 ^old1 new2 ^old2 ^everything_else
+
+    It returns a list of commits"""
+
+    all_refs = set(call_git('for-each-ref', ['--format=%(refname)']).splitlines())
+    commands = []
+    for old, new, ref in ref_updates:
+        if re.match('0*$', new): # branch delete, skip it
+            continue
+
+        commands += [new]
+        all_refs.discard(ref)
+
+        if not re.match('0*$', old): # update
+            commands += ["^%s" % old]
+
+    for ref in all_refs:
+        commands += ["^%s" % ref]
+
+    new_commits = call_git('rev-list', ['--stdin', '--reverse'], '\n'.join(commands)).splitlines()
+    return new_commits
+
+
+def handle_commits(commit):
+    msg = call_git('rev-list', ['-n', '1', commit, '--pretty=medium']).rstrip()
+    usr = call_git('rev-list', ['-n', '1', commit, '--pretty=format:%ae']).splitlines()[1]
+
+    ticket_actions = {}
+    for cmd, tickets in command_re.findall(msg.split('\n\n', 1)[1]):
+        action = COMMANDS.get(cmd.lower())
+        if action:
+            for ticket_id in ticket_re.findall(tickets):
+                ticket_actions.setdefault(ticket_id, []).append(action)
+
+
+    for ticket_id, actions in ticket_actions.iteritems():
+        try:
+            if 'fixed' in actions:
+                resolve_ticket(ticket_id, usr, msg)
+        except Exception, e:
+            print('[Error] Ticket ID %s: %s' % (ticket_id, e))
+
+
+if __name__ == '__main__':
+    lines = .stdin.readlines()
+    updates = [line.split() for line in lines]
+    commits = get_new_commits(updates)
+    for commit in commits:
+        handle_commits(commit)
