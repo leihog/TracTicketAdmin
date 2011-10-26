@@ -4,7 +4,7 @@ import sys
 
 from trac.core import *
 from trac.ticket import Ticket
-from trac.util.text import printout
+from trac.util.text import printout, to_unicode
 from trac.admin import IAdminCommandProvider
 
 class TicketAdmin(Component):
@@ -44,14 +44,14 @@ class TicketAdmin(Component):
 
             self._save_ticket(ticket, user, comment)
             printout('Resolved ticket %s using resolution %s' % (ticket_id, resolution))
-        except:
-            printout('Failed to modify ticket')
+        except Exception, e:
+            printout('Failed to modify ticket. Reason: %s' % e)
 
     def _save_ticket(self, ticket, user=None, comment=None):
         #todo convert email to trac user when possible
 
         if comment is not None:
-            comment = comment.decode("string-escape")
+            comment = to_unicode(comment.decode("string-escape"))
 
         ticket.save_changes(user, comment)
         # todo add a ticket change entry 
