@@ -8,9 +8,7 @@ from subprocess import Popen, PIPE, call
 
 GIT_PATH = '/usr/bin/git'
 TRAC_ADMIN = '/usr/local/bin/trac-admin'
-BRANCHES = ['master']
 TRAC_ENV = '/media/sf_projects/trac/leif'
-REPO_NAME = '(default)'
 COMMANDS = {'fixes':    'fixed',
             'fixed':    'fixed',
             'fix':      'fixed',
