@@ -33,7 +33,6 @@ def call_git(command, args, input=None):
 
 def resolve_ticket(ticket_id, usr, comment):
     foo = '%s %s ticket_resolve %s fixed %s "%s"' % (TRAC_ADMIN, TRAC_ENV, ticket_id, usr, comment.encode('string-escape') )
-    foo = shlex.split(foo)
     return Popen( shlex.split(foo), stdout=PIPE ).communicate()[0]
 
 
@@ -87,7 +86,7 @@ def handle_commits(commit):
 
 
 if __name__ == '__main__':
-    lines = .stdin.readlines()
+    lines = sys.stdin.readlines()
     updates = [line.split() for line in lines]
     commits = get_new_commits(updates)
     for commit in commits:
